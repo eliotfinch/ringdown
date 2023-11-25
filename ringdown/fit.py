@@ -11,7 +11,7 @@ from ast import literal_eval
 from collections import namedtuple
 import configparser
 import copy as cp
-import data
+from . import data as rd_data
 import lal
 import logging
 from . import model
@@ -247,10 +247,10 @@ class Fit(object):
                 dtau_max=0.5,
                 M_min=None,
                 M_max=None,
-                M_fixed=None,
+                M_fix=None,
                 chi_min=0,
                 chi_max=0.99,
-                chi_fixed=None,
+                chi_fix=None,
                 cosi_min=-1,
                 cosi_max=1,
                 flat_A=0,
@@ -624,7 +624,7 @@ class Fit(object):
             logging.warning("preserving existing ACFs after conditioning")
         # record conditioning settings
         self.update_info('condition', **kwargs)
-    condition_data.__doc__ += data.Data.condition.__doc__
+    condition_data.__doc__ += rd_data.Data.condition.__doc__
 
     def get_templates(self, signal_buffer='auto', **kws):
         """Produce templates at each detector for a given set of parameters.
@@ -842,8 +842,8 @@ class Fit(object):
         acf : array,AutoCovariance
             autocovariance series corresponding to these data (optional).
         """
-        if not isinstance(data, data.Data):
-            data = data.Data(data, index=getattr(data, 'time', time), ifo=ifo)
+        if not isinstance(data, rd_data.Data):
+            data = rd_data.Data(data, index=getattr(data, 'time', time), ifo=ifo)
         self.data[data.ifo] = data
         if acf is not None:
             self.acfs[data.ifo] = acf
@@ -883,11 +883,11 @@ class Fit(object):
         path_dict = {k: os.path.abspath(v) for k,v in path_dict.items()}
         tslide = kws.pop('slide', {}) or {}
         for ifo, path in path_dict.items():
-            self.add_data(data.Data.read(path, ifo=ifo, **kws))
+            self.add_data(rd_data.Data.read(path, ifo=ifo, **kws))
         # apply time slide if requested
         for i, dt in tslide.items():
             d = self.data[i]
-            new_d = data.Data(np.roll(d, int(dt / d.delta_t)), ifo=i, index=d.time)
+            new_d = rd_data.Data(np.roll(d, int(dt / d.delta_t)), ifo=i, index=d.time)
             self.add_data(new_d)
         # record data provenance
         self.update_info('data', path=path_dict, **kws)
@@ -966,9 +966,9 @@ class Fit(object):
         path_dict = {k: os.path.abspath(v) for k,v in path_dict.items()}
         for ifo, p in path_dict.items():
             if from_psd:
-                self.acfs[ifo] = data.PowerSpectrum.read(p, **kws).to_acf()
+                self.acfs[ifo] = rd_data.PowerSpectrum.read(p, **kws).to_acf()
             else:
-                self.acfs[ifo] = data.AutoCovariance.read(p, **kws)
+                self.acfs[ifo] = rd_data.AutoCovariance.read(p, **kws)
         # record ACF computation options
         self.update_info('acf', path=path_dict, from_psd=from_psd, **kws)
 
