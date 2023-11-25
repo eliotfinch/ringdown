@@ -5,7 +5,7 @@ detectors.
 __all__ = ['Series', 'TimeSeries', 'FrequencySeries', 'Data',
            'AutoCovariance', 'PowerSpectrum']
 
-from pylab import *
+import numpy as np
 import scipy.signal as sig
 import lal
 import scipy.linalg as sl
@@ -67,7 +67,7 @@ class Series(pd.Series):
                 T = f['meta/Duration'][()]
                 h = f['strain/Strain'][:]
                 dt = T/len(h)
-                time = t0 + dt*arange(len(h))
+                time = t0 + dt*np.arange(len(h))
                 return cls(h, index=time, **kws)
         elif kind == 'frame':
             channel = kws.pop('channel')
@@ -122,7 +122,7 @@ class Series(pd.Series):
         """
         kws = self._DEF_INTERP_KWS.copy()
         kws.update(**kwargs)
-        if any(iscomplex(self.values)):
+        if any(np.iscomplex(self.values)):
             re_interp_func = interp1d(self.index, self.values.real, **kws)
             im_interp_func = interp1d(self.index, self.values.imag, **kws)
             interp = re_interp_func(new_index) + 1j*im_interp_func(new_index)
@@ -363,9 +363,9 @@ class Data(TimeSeries):
 
         if t0 is not None:
             ds = int(ds or 1)
-            i = argmin(abs(raw_time - t0))
-            raw_time = roll(raw_time, -(i % ds))
-            raw_data = roll(raw_data, -(i % ds))
+            i = np.argmin(abs(raw_time - t0))
+            raw_time = np.roll(raw_time, -(i % ds))
+            raw_data = np.roll(raw_data, -(i % ds))
 
         fny = 0.5/(raw_time[1] - raw_time[0])
         # Filter
@@ -414,7 +414,7 @@ class Data(TimeSeries):
         cond_data = cond_data[istart:iend]
 
         if remove_mean:
-            cond_data -= mean(cond_data)
+            cond_data -= np.mean(cond_data)
 
         return Data(cond_data, index=cond_time, ifo=self.ifo)
 
@@ -438,7 +438,7 @@ class PowerSpectrum(FrequencySeries):
     def __init__(self, *args, delta_f=None, **kwargs):
         super(PowerSpectrum, self).__init__(*args, **kwargs)
         if delta_f is not None:
-            self.index = arange(len(self))*delta_f
+            self.index = np.arange(len(self))*delta_f
 
     @property
     def _constructor(self):
@@ -506,14 +506,14 @@ class PowerSpectrum(FrequencySeries):
         if isinstance(func, str):
             import lalsimulation as lalsim
             func = getattr(lalsim, func)
-        f_ref = freq[argmin(abs(freq - flow))]
+        f_ref = freq[np.argmin(abs(freq - flow))]
         p_ref = func(f_ref)
         def get_psd_bin(f):
             if f > flow:
                 return func(f)
             else:
                 return cls._pad_low_freqs(f, f_ref, p_ref)
-        psd = cls(vectorize(get_psd_bin)(freq), index=freq)
+        psd = cls(np.vectorize(get_psd_bin)(freq), index=freq)
         return psd
         
     @staticmethod
@@ -587,7 +587,7 @@ class AutoCovariance(TimeSeries):
     def __init__(self, *args, delta_t=None, **kwargs):
         super(AutoCovariance, self).__init__(*args, **kwargs)
         if delta_t is not None:
-            self.index = arange(len(self))*delta_t
+            self.index = np.arange(len(self))*delta_t
 
     @property
     def _constructor(self):
@@ -624,7 +624,7 @@ class AutoCovariance(TimeSeries):
         n = n or len(d)
         if method.lower() == 'td':
             rho = sig.correlate(d, d, **kws)
-            rho = ifftshift(rho)
+            rho = np.ifftshift(rho)
             rho = rho[:n] / len(d)
         elif method.lower() == 'fd':
             kws['fs'] = kws.get('fs', 1/dt)
@@ -658,7 +658,7 @@ class AutoCovariance(TimeSeries):
         """Cholesky factor :math:`L` of covariance matrix :math:`C = L^TL`.
         """
         if getattr(self, '_cholesky', None) is None:
-            self._cholesky = linalg.cholesky(self.matrix)
+            self._cholesky = np.linalg.cholesky(self.matrix)
         return self._cholesky
 
     def compute_snr(self, x, y=None):
@@ -687,7 +687,7 @@ class AutoCovariance(TimeSeries):
 
         if y is None: y = x
         ow_x = sl.solve_toeplitz(self.iloc[:len(x)], x)
-        return dot(ow_x, y)/sqrt(dot(x, ow_x))
+        return np.dot(ow_x, y)/np.sqrt(np.dot(x, ow_x))
 
     def whiten(self, data):
         """Whiten stretch of data using ACF.

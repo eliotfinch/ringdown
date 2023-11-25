@@ -3,8 +3,7 @@
 
 __all__ = ['Target', 'Fit', 'MODELS']
 
-from pylab import *
-
+import numpy as np
 import arviz as az
 import json
 from arviz.data.base import dict_to_dataset
@@ -12,7 +11,7 @@ from ast import literal_eval
 from collections import namedtuple
 import configparser
 import copy as cp
-from .data import *
+import data
 import lal
 import logging
 from . import model
@@ -176,7 +175,7 @@ class Fit(object):
             coeffs = qnms.KerrMode(mode).coefficients
             f_coeffs.append(coeffs[0])
             g_coeffs.append(coeffs[1])
-        return array(f_coeffs), array(g_coeffs)
+        return np.array(f_coeffs), np.array(g_coeffs)
 
     @property
     def analysis_data(self) -> dict:
@@ -204,8 +203,8 @@ class Fit(object):
             ))
         elif self.model == 'mchi':
             default.update(dict(
-                perturb_f=zeros(self.n_modes or 1),
-                perturb_tau=zeros(self.n_modes or 1),
+                perturb_f=np.zeros(self.n_modes or 1),
+                perturb_tau=np.zeros(self.n_modes or 1),
                 df_min=-0.5,
                 dtau_min=-0.5,
                 df_max=0.5,
@@ -224,8 +223,8 @@ class Fit(object):
             del default['A_scale']
             default.update(dict(
                 A_scale_max=None,
-                perturb_f=zeros(self.n_modes or 1),
-                perturb_tau=zeros(self.n_modes or 1),
+                perturb_f=np.zeros(self.n_modes or 1),
+                perturb_tau=np.zeros(self.n_modes or 1),
                 df_min=-0.5,
                 dtau_min=-0.5,
                 df_max=0.5,
@@ -240,16 +239,18 @@ class Fit(object):
             ))
         elif self.model == 'mchi_aligned':
             default.update(dict(
-                perturb_f=zeros(self.n_modes or 1),
-                perturb_tau=zeros(self.n_modes or 1),
+                perturb_f=np.zeros(self.n_modes or 1),
+                perturb_tau=np.zeros(self.n_modes or 1),
                 df_min=-0.5,
                 dtau_min=-0.5,
                 df_max=0.5,
                 dtau_max=0.5,
                 M_min=None,
                 M_max=None,
+                M_fixed=None,
                 chi_min=0,
                 chi_max=0.99,
+                chi_fixed=None,
                 cosi_min=-1,
                 cosi_max=1,
                 flat_A=0,
@@ -264,7 +265,7 @@ class Fit(object):
                  r2_qchi_min=0.0,
                  r2_qchi_max=1.0,
                  theta_qchi_min=0.0,
-                 theta_qchi_max=pi/2,
+                 theta_qchi_max=np.pi/2,
                  df_coeffs=[],
                  dg_coeffs=[],
                  flat_A=0,
@@ -336,7 +337,7 @@ class Fit(object):
             nmode=self.n_modes,
             nobs=len(data_dict),
             t0=list(self.start_times.values()),
-            times=[array(d.time) for d in data_dict.values()],
+            times=[np.array(d.time) for d in data_dict.values()],
             strains=[s.values for s in data_dict.values()],
             Ls=[a.iloc[:self.n_analyze].cholesky for a in self.acfs.values()],
             Fps = fp,
@@ -540,7 +541,7 @@ class Fit(object):
         config = configparser.ConfigParser()
         # utility to format options in config
         def form_opt(x):
-            return array2string(array(x), separator=', ')
+            return np.array2string(np.array(x), separator=', ')
         # model options
         config['model'] = {}
         config['model']['name'] = self.model
@@ -623,7 +624,7 @@ class Fit(object):
             logging.warning("preserving existing ACFs after conditioning")
         # record conditioning settings
         self.update_info('condition', **kwargs)
-    condition_data.__doc__ += Data.condition.__doc__
+    condition_data.__doc__ += data.Data.condition.__doc__
 
     def get_templates(self, signal_buffer='auto', **kws):
         """Produce templates at each detector for a given set of parameters.
@@ -841,8 +842,8 @@ class Fit(object):
         acf : array,AutoCovariance
             autocovariance series corresponding to these data (optional).
         """
-        if not isinstance(data, Data):
-            data = Data(data, index=getattr(data, 'time', time), ifo=ifo)
+        if not isinstance(data, data.Data):
+            data = data.Data(data, index=getattr(data, 'time', time), ifo=ifo)
         self.data[data.ifo] = data
         if acf is not None:
             self.acfs[data.ifo] = acf
@@ -882,11 +883,11 @@ class Fit(object):
         path_dict = {k: os.path.abspath(v) for k,v in path_dict.items()}
         tslide = kws.pop('slide', {}) or {}
         for ifo, path in path_dict.items():
-            self.add_data(Data.read(path, ifo=ifo, **kws))
+            self.add_data(data.Data.read(path, ifo=ifo, **kws))
         # apply time slide if requested
         for i, dt in tslide.items():
             d = self.data[i]
-            new_d = Data(np.roll(d, int(dt / d.delta_t)), ifo=i, index=d.time)
+            new_d = data.Data(np.roll(d, int(dt / d.delta_t)), ifo=i, index=d.time)
             self.add_data(new_d)
         # record data provenance
         self.update_info('data', path=path_dict, **kws)
@@ -965,9 +966,9 @@ class Fit(object):
         path_dict = {k: os.path.abspath(v) for k,v in path_dict.items()}
         for ifo, p in path_dict.items():
             if from_psd:
-                self.acfs[ifo] = PowerSpectrum.read(p, **kws).to_acf()
+                self.acfs[ifo] = data.PowerSpectrum.read(p, **kws).to_acf()
             else:
-                self.acfs[ifo] = AutoCovariance.read(p, **kws)
+                self.acfs[ifo] = data.AutoCovariance.read(p, **kws)
         # record ACF computation options
         self.update_info('acf', path=path_dict, from_psd=from_psd, **kws)
 
@@ -1166,7 +1167,7 @@ class Fit(object):
             # find sample closest to (but no later than) requested start time
             for ifo, d in self.data.items():
                 t0 = self.start_times[ifo]
-                i0_dict[ifo] = argmin(abs(d.time - t0))
+                i0_dict[ifo] = np.argmin(abs(d.time - t0))
         return i0_dict
 
     @property
@@ -1269,7 +1270,7 @@ class Fit(object):
         hs = self.result.posterior.h_det.stack(samples=('chain', 'draw'))
         # whiten the reconstructions using the Cholesky factors, L, with shape
         # (ifo, time, time). the resulting object will have shape (ifo, time, sample)
-        return linalg.solve(self.result.constant_data.L, hs)
+        return np.linalg.solve(self.result.constant_data.L, hs)
 
     def compute_posterior_snrs(self, optimal=True, network=True) -> np.ndarray:
         """Efficiently computes signal-to-noise ratios from posterior samples,
@@ -1303,7 +1304,7 @@ class Fit(object):
         # get whitened reconstructions from posterior (ifo, time, sample)
         whs = self.whitened_templates
         # take the norm across time to get optimal snrs for each (ifo, sample)
-        opt_ifo_snrs = linalg.norm(whs, axis=1)
+        opt_ifo_snrs = np.linalg.norm(whs, axis=1)
         if optimal:
             snrs = opt_ifo_snrs
         else:
@@ -1313,14 +1314,14 @@ class Fit(object):
                 ds = self.result.observed_data.strain
             else:
                 # strain values stored in "new" PyMC structure
-                ds = array([d.values for d in self.result.observed_data.values()])
+                ds = np.array([d.values for d in self.result.observed_data.values()])
             # whiten it with the Cholesky factors, so shape will remain (ifo, time)
-            wds = linalg.solve(self.result.constant_data.L, ds)
+            wds = np.linalg.solve(self.result.constant_data.L, ds)
             # take inner product between whitened template and data, and normalize
-            snrs = einsum('ijk,ij->ik', whs, wds)/opt_ifo_snrs
+            snrs = np.einsum('ijk,ij->ik', whs, wds)/opt_ifo_snrs
         if network:
             # take norm across detectors
-            return linalg.norm(snrs, axis=0)
+            return np.linalg.norm(snrs, axis=0)
         else:
             return snrs
 
