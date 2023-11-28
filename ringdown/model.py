@@ -345,13 +345,11 @@ def make_mchi_aligned_model(t0, times, strains, Ls, Fps, Fcs, f_coeffs,
         pm.ConstantData('L', Ls, dims=['ifo', 'time_index', 'time_index'])
 
         if M_min == M_max:
-            print("Running with M_min = M_max = ", M_min)
             M = pm.ConstantData('M', M_min)
         else:
             M = pm.Uniform("M", M_min, M_max)
 
         if chi_min == chi_max:
-            print("Running with chi_min = chi_max = ", chi_min)
             chi = pm.ConstantData('chi', chi_min)
         else:
             chi = pm.Uniform("chi", chi_min, chi_max)
