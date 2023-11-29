@@ -312,6 +312,8 @@ def make_mchi_aligned_model(t0, times, strains, Ls, Fps, Fcs, f_coeffs,
     perturb_f = kwargs.pop("perturb_f", 0)
     perturb_tau = kwargs.pop("perturb_tau", 0)
     flat_A = kwargs.pop("flat_A", True)
+    fix_A = kwargs.pop("fix_A", 0)
+    fix_phi = kwargs.pop("fix_phi", 0)
     f_min = kwargs.pop('f_min', 0.0)
     f_max = kwargs.pop('f_max', np.inf)
     nmode = f_coeffs.shape[0]
@@ -321,6 +323,14 @@ def make_mchi_aligned_model(t0, times, strains, Ls, Fps, Fcs, f_coeffs,
         flat_A = np.repeat(flat_A,nmode)
     elif len(flat_A)!=nmode:
         raise ValueError("flat_A must either be a scalar or array of length equal to the number of modes")
+    
+    if fix_A != 0:
+        if len(fix_A)!=nmode:
+            raise ValueError("fix_A must either be 0 or array of length equal to the number of modes")
+        
+    if fix_phi != 0:
+        if len(fix_phi)!=nmode:
+            raise ValueError("fix_phi must either be 0 or array of length equal to the number of modes")
 
     if (cosi_min < -1) or (cosi_max > 1):
         raise ValueError("cosi boundaries must be contained in [-1, 1]")
@@ -345,12 +355,12 @@ def make_mchi_aligned_model(t0, times, strains, Ls, Fps, Fcs, f_coeffs,
         pm.ConstantData('L', Ls, dims=['ifo', 'time_index', 'time_index'])
 
         if M_min == M_max:
-            M = pm.ConstantData('M', M_min)
+            M = pm.ConstantData("M", M_min)
         else:
             M = pm.Uniform("M", M_min, M_max)
 
         if chi_min == chi_max:
-            chi = pm.ConstantData('chi', chi_min)
+            chi = pm.ConstantData("chi", chi_min)
         else:
             chi = pm.Uniform("chi", chi_min, chi_max)
 
@@ -359,14 +369,26 @@ def make_mchi_aligned_model(t0, times, strains, Ls, Fps, Fcs, f_coeffs,
         Ax_unit = pm.Normal("Ax_unit", dims=['mode'])
         Ay_unit = pm.Normal("Ay_unit", dims=['mode'])
 
+        if fix_A != 0:
+            A = pm.ConstantData("A", fix_A, dims=['mode'])
+        else:
+            A = pm.Deterministic(
+                "A",
+                A_scale*at.sqrt(at.square(Ax_unit)+at.square(Ay_unit)),
+                dims=['mode']
+                )
+            
+        if fix_phi != 0:
+            phi = pm.ConstantData("phi", fix_phi, dims=['mode'])
+        else:
+            phi = pm.Deterministic(
+                "phi", 
+                at.arctan2(Ay_unit, Ax_unit),
+                dims=['mode']
+                )
+
         df = pm.Uniform("df", df_min, df_max, dims=['mode'])
         dtau = pm.Uniform("dtau", dtau_min, dtau_max, dims=['mode'])
-
-        A = pm.Deterministic("A",
-            A_scale*at.sqrt(at.square(Ax_unit)+at.square(Ay_unit)),
-            dims=['mode'])
-        phi = pm.Deterministic("phi", at.arctan2(Ay_unit, Ax_unit),
-            dims=['mode'])
 
         f0 = FREF*MREF/M
         f = pm.Deterministic('f',
@@ -407,12 +429,14 @@ def make_mchi_aligned_model(t0, times, strains, Ls, Fps, Fcs, f_coeffs,
         # Flat in M-chi already
 
         # Amplitude prior
-        if any(flat_A):
-            # first bring us to flat in quadratures
-            pm.Potential("flat_A_quadratures_prior",
-                         0.5*at.sum((at.square(Ax_unit) + at.square(Ay_unit))*flat_A))
-            # now to flat in A
-            pm.Potential("flat_A_prior", -at.sum(at.log(A)*flat_A))
+
+        if (fix_A == 0) or any(element == 0 for element in fix_A):
+            if any(flat_A):
+                # first bring us to flat in quadratures
+                pm.Potential("flat_A_quadratures_prior",
+                            0.5*at.sum((at.square(Ax_unit) + at.square(Ay_unit))*flat_A))
+                # now to flat in A
+                pm.Potential("flat_A_prior", -at.sum(at.log(A)*flat_A))
 
         # Flat prior on the delta-fs and delta-taus
 

@@ -252,6 +252,8 @@ class Fit(object):
                 cosi_min=-1,
                 cosi_max=1,
                 flat_A=0,
+                fix_A=0,
+                fix_phi=0,
                 f_min=0.0,
                 f_max=np.inf,
                 prior_run=False
