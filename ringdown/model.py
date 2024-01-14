@@ -369,27 +369,32 @@ def make_mchi_aligned_model(t0, times, strains, Ls, Fps, Fcs, f_coeffs,
         Ax_unit = pm.Normal("Ax_unit", dims=['mode'])
         Ay_unit = pm.Normal("Ay_unit", dims=['mode'])
 
-        if fix_A != 0:
-            A = pm.ConstantData("A", fix_A, dims=['mode'])
+        A_temp = pm.Deterministic(
+            "A_temp",
+            A_scale*at.sqrt(at.square(Ax_unit)+at.square(Ay_unit)),
+            dims=['mode']
+        )
+        
+        if (fix_A != 0) or any(element != 0 for element in fix_A):
+            A_mask = [1 if fix_A[i] == 0 else 0 for i in range(nmode)]
+            A = pm.Deterministic("A", A_temp*A_mask + fix_A, dims=['mode'])
         else:
-            A = pm.Deterministic(
-                "A",
-                A_scale*at.sqrt(at.square(Ax_unit)+at.square(Ay_unit)),
-                dims=['mode']
-                )
-            
-        if fix_phi != 0:
-            phi = pm.ConstantData("phi", fix_phi, dims=['mode'])
+            A = pm.Deterministic("A", A_temp, dims=['mode'])
+
+        phi_temp = pm.Deterministic(
+            "phi_temp", 
+            at.arctan2(Ay_unit, Ax_unit),
+            dims=['mode']
+        )
+
+        if (fix_phi != 0) or any(element != 0 for element in fix_phi):
+            phi_mask = [1 if fix_phi[i] == 0 else 0 for i in range(nmode)]
+            phi = pm.Deterministic("phi", phi_temp*phi_mask + fix_phi, dims=['mode'])
         else:
-            phi = pm.Deterministic(
-                "phi", 
-                at.arctan2(Ay_unit, Ax_unit),
-                dims=['mode']
-                )
+            phi = pm.Deterministic("phi", phi_temp, dims=['mode'])
 
         df = pm.Uniform("df", df_min, df_max, dims=['mode'])
         dtau = pm.Uniform("dtau", dtau_min, dtau_max, dims=['mode'])
-
         f0 = FREF*MREF/M
         f = pm.Deterministic('f',
             f0*chi_factors(chi, f_coeffs)*at.exp(df * perturb_f),
