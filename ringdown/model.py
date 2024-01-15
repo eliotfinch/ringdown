@@ -324,13 +324,15 @@ def make_mchi_aligned_model(t0, times, strains, Ls, Fps, Fcs, f_coeffs,
     elif len(flat_A)!=nmode:
         raise ValueError("flat_A must either be a scalar or array of length equal to the number of modes")
     
-    if fix_A != 0:
-        if len(fix_A)!=nmode:
-            raise ValueError("fix_A must either be 0 or array of length equal to the number of modes")
-        
-    if fix_phi != 0:
-        if len(fix_phi)!=nmode:
-            raise ValueError("fix_phi must either be 0 or array of length equal to the number of modes")
+    if np.isscalar(fix_A):
+        fix_A = np.repeat(fix_A,nmode)
+    elif len(fix_A)!=nmode:
+        raise ValueError("fix_A must either be a 0 or array of length equal to the number of modes")
+    
+    if np.isscalar(fix_phi):
+        fix_phi = np.repeat(fix_phi,nmode)
+    elif len(fix_phi)!=nmode:
+        raise ValueError("fix_phi must either be a 0 or array of length equal to the number of modes")
 
     if (cosi_min < -1) or (cosi_max > 1):
         raise ValueError("cosi boundaries must be contained in [-1, 1]")
@@ -369,17 +371,11 @@ def make_mchi_aligned_model(t0, times, strains, Ls, Fps, Fcs, f_coeffs,
         Ax_unit = pm.Normal("Ax_unit", dims=['mode'])
         Ay_unit = pm.Normal("Ay_unit", dims=['mode'])
 
-        A_temp = pm.Deterministic(
-            "A_temp",
-            A_scale*at.sqrt(at.square(Ax_unit)+at.square(Ay_unit)),
-            dims=['mode']
-        )
+        A_temp = A_scale*at.sqrt(at.square(Ax_unit)+at.square(Ay_unit))
         
-        if (fix_A != 0) or any(element != 0 for element in fix_A):
-            A_mask = [1 if fix_A[i] == 0 else 0 for i in range(nmode)]
-            A = pm.Deterministic("A", A_temp*A_mask + fix_A, dims=['mode'])
-        else:
-            A = pm.Deterministic("A", A_temp, dims=['mode'])
+        if any(element != 0 for element in fix_A):
+            A_temp = at.set_subtensor(A_temp[0], fix_A[0])
+        A = pm.Deterministic("A", A_temp, dims=['mode'])
 
         phi_temp = pm.Deterministic(
             "phi_temp", 
@@ -387,11 +383,9 @@ def make_mchi_aligned_model(t0, times, strains, Ls, Fps, Fcs, f_coeffs,
             dims=['mode']
         )
 
-        if (fix_phi != 0) or any(element != 0 for element in fix_phi):
-            phi_mask = [1 if fix_phi[i] == 0 else 0 for i in range(nmode)]
-            phi = pm.Deterministic("phi", phi_temp*phi_mask + fix_phi, dims=['mode'])
-        else:
-            phi = pm.Deterministic("phi", phi_temp, dims=['mode'])
+        if any(element != 0 for element in fix_phi):
+            phi_temp = at.set_subtensor(phi_temp[0], fix_phi[0])
+        phi = pm.Deterministic("phi", phi_temp, dims=['mode'])
 
         df = pm.Uniform("df", df_min, df_max, dims=['mode'])
         dtau = pm.Uniform("dtau", dtau_min, dtau_max, dims=['mode'])
@@ -435,7 +429,7 @@ def make_mchi_aligned_model(t0, times, strains, Ls, Fps, Fcs, f_coeffs,
 
         # Amplitude prior
 
-        if (fix_A == 0) or any(element == 0 for element in fix_A):
+        if any(element == 0 for element in fix_A):
             if any(flat_A):
                 # first bring us to flat in quadratures
                 pm.Potential("flat_A_quadratures_prior",
